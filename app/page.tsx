@@ -437,12 +437,12 @@ async function loadCustomerPrizes(customerIdValue: number) {
   <img
     src="/finca8-logo.png"
     alt="Finca 8"
-    className="w-24 h-24 object-contain mb-4"
+    className="w-28 h-28 object-contain mb-4"
   />
 
   <h1 className="text-4xl font-bold text-center">
-    Mundial 2026 en Finca 8
-  </h1>
+Mundial 2026<br />
+en Finca 8  </h1>
 </div>
 {currentLocation && (
   <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-4 text-center mb-6">
@@ -487,8 +487,9 @@ async function loadCustomerPrizes(customerIdValue: number) {
         {step === "register" && (
           <>
             <h1 className="text-4xl font-bold mb-4">
-              ⚽ Mundial 2026 en Finca 8
-            </h1>
+Mundial 2026<br />
+en Finca 8           
+ </h1>
 
             <p className="mb-8 text-gray-400">
               Nuevo cliente. Completá tu registro.
@@ -822,7 +823,7 @@ async function loadCustomerPrizes(customerIdValue: number) {
   <img
     src="/tecnomovi-logo.png"
     alt="TecnoMovi"
-    className="w-40 object-contain opacity-90"
+className="w-44 object-contain opacity-90"
   />
 </div>
     </main>
