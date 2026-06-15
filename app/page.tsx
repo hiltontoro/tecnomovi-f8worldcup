@@ -429,13 +429,21 @@ async function loadCustomerPrizes(customerIdValue: number) {
     "☆".repeat(Math.max(stampsGoal - cycleStamps, 0));
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-black text-white">
+  <main className="min-h-screen flex flex-col items-center justify-center bg-black text-white">
       <div className="w-full max-w-md p-8 text-center">
         {step === "phone" && (
           <>
-            <h1 className="text-4xl font-bold mb-4">
-              ⚽ Mundial 2026 en Finca 8
-            </h1>
+            <div className="flex flex-col items-center mb-6">
+  <img
+    src="/finca8-logo.png"
+    alt="Finca 8"
+    className="w-24 h-24 object-contain mb-4"
+  />
+
+  <h1 className="text-4xl font-bold text-center">
+    Mundial 2026 en Finca 8
+  </h1>
+</div>
 {currentLocation && (
   <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-4 text-center mb-6">
     <p className="text-sm text-gray-400">
@@ -806,6 +814,17 @@ async function loadCustomerPrizes(customerIdValue: number) {
           </p>
         )}
       </div>
+      <div className="mt-12 flex flex-col items-center">
+  <p className="text-xs text-gray-500 mb-3">
+    Experiencia desarrollada por
+  </p>
+
+  <img
+    src="/tecnomovi-logo.png"
+    alt="TecnoMovi"
+    className="w-40 object-contain opacity-90"
+  />
+</div>
     </main>
   );
 }
