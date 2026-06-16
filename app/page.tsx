@@ -296,7 +296,7 @@ async function loadCustomerPrizes(customerIdValue: number) {
     }
 
     if (!currentLocation) {
-      setMessage("Para hacer pronósticos, escaneá el QR dentro de Finca 8 o seleccioná el local donde estás.");
+      setMessage("⚽ Para participar, visitá cualquiera de nuestros locales, escaneá el QR y obtené la clave del día.");
       return;
     }
 

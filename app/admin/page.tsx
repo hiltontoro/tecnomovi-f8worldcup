@@ -15,6 +15,9 @@ const [dashboardStats, setDashboardStats] = useState({
   sanRafaelCustomersCount: 0,
   ventuCustomersCount: 0,
   birthdayMonthCustomersCount: 0,
+  totalPrizesCount: 0,
+  registrationGoal: 500,
+  predictionGoal: 1000,
   todayCode: "Sin código",
   tomorrowCode: "Sin código",
   topCustomerName: "Sin datos",
@@ -94,6 +97,10 @@ const { count: deliveredPrizesCount } = await supabase
   .select("*", { count: "exact", head: true })
   .eq("delivered", true);
 
+const { count: totalPrizesCount } = await supabase
+  .from("customer_prizes")
+  .select("*", { count: "exact", head: true });
+
 const { count: sanRafaelCustomersCount } = await supabase
   .from("customers")
   .select("*", { count: "exact", head: true })
@@ -155,20 +162,23 @@ const { data: tomorrowCodeData } = await supabase
     : topCustomer?.customers;
 
   setDashboardStats({
-  customersCount: customersCount || 0,
-  predictionsCount: predictionsCount || 0,
-  visitsCount: visitsCount || 0,
-  pendingPrizesCount: pendingPrizesCount || 0,
-  deliveredPrizesCount: deliveredPrizesCount || 0,
-  sanRafaelCustomersCount: sanRafaelCustomersCount || 0,
-  ventuCustomersCount: ventuCustomersCount || 0,
-  birthdayMonthCustomersCount: birthdayMonthCustomersCount || 0,
-  todayCode: todayCodeData?.code || "Sin código",
-  tomorrowCode: tomorrowCodeData?.code || "Sin código",
-  topCustomerName: topCustomerData?.name || "Sin datos",
-  topCustomerStamps: topCustomer?.stamps_count || 0,
-  topCustomerRaffleEntries: topCustomer?.final_raffle_entries || 0,
-});
+    customersCount: customersCount || 0,
+    predictionsCount: predictionsCount || 0,
+    visitsCount: visitsCount || 0,
+    pendingPrizesCount: pendingPrizesCount || 0,
+    deliveredPrizesCount: deliveredPrizesCount || 0,
+    sanRafaelCustomersCount: sanRafaelCustomersCount || 0,
+    ventuCustomersCount: ventuCustomersCount || 0,
+    birthdayMonthCustomersCount: birthdayMonthCustomersCount || 0,
+    totalPrizesCount: totalPrizesCount || 0,
+    registrationGoal: 500,
+    predictionGoal: 1000,
+    todayCode: todayCodeData?.code || "Sin código",
+    tomorrowCode: tomorrowCodeData?.code || "Sin código",
+    topCustomerName: topCustomerData?.name || "Sin datos",
+    topCustomerStamps: topCustomer?.stamps_count || 0,
+    topCustomerRaffleEntries: topCustomer?.final_raffle_entries || 0,
+  });
 }
 async function loadPendingPrizes() {
   const { data, error } = await supabase
@@ -462,59 +472,66 @@ async function markPrizeDelivered(prizeId: number) {
       {activeTab === "dashboard" && (
         <div className="space-y-6 max-w-5xl">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6">
-              <p className="text-gray-400 mb-2">Clientes registrados</p>
-              <p className="text-4xl font-bold">{dashboardStats.customersCount}</p>
-            </div>
+            <MetricCard
+              title="Clientes registrados"
+              value={dashboardStats.customersCount}
+              goal={dashboardStats.registrationGoal}
+            />
 
-            <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6">
-              <p className="text-gray-400 mb-2">Pronósticos guardados</p>
-              <p className="text-4xl font-bold">{dashboardStats.predictionsCount}</p>
-            </div>
+            <MetricCard
+              title="Pronósticos guardados"
+              value={dashboardStats.predictionsCount}
+              goal={dashboardStats.predictionGoal}
+            />
 
-            <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6">
-              <p className="text-gray-400 mb-2">Visitas registradas</p>
-              <p className="text-4xl font-bold">{dashboardStats.visitsCount}</p>
-            </div>
+            <MetricCard
+              title="Visitas registradas"
+              value={dashboardStats.visitsCount}
+            />
 
-            <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6">
-              <p className="text-gray-400 mb-2">Premios pendientes</p>
-              <p className="text-4xl font-bold">{dashboardStats.pendingPrizesCount}</p>
-            </div>
+            <MetricCard
+              title="Premios pendientes"
+              value={dashboardStats.pendingPrizesCount}
+            />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6">
-              <p className="text-gray-400 mb-2">Código de hoy</p>
-              <p className="text-3xl font-bold">{dashboardStats.todayCode}</p>
-            </div>
+            <MetricCard
+              title="Código de hoy"
+              value={dashboardStats.todayCode}
+            />
 
-            <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6">
-              <p className="text-gray-400 mb-2">Código de mañana</p>
-              <p className="text-3xl font-bold">{dashboardStats.tomorrowCode}</p>
-            </div>
+            <MetricCard
+              title="Código de mañana"
+              value={dashboardStats.tomorrowCode}
+            />
 
-            <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6">
-              <p className="text-gray-400 mb-2">Premios entregados</p>
-              <p className="text-4xl font-bold">{dashboardStats.deliveredPrizesCount}</p>
-            </div>
+            <MetricCard
+              title="Premios entregados"
+              value={dashboardStats.deliveredPrizesCount}
+            />
 
-            <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6">
-              <p className="text-gray-400 mb-2">Cumpleaños del mes</p>
-              <p className="text-4xl font-bold">{dashboardStats.birthdayMonthCustomersCount}</p>
-            </div>
+            <MetricCard
+              title="Cumpleaños del mes"
+              value={dashboardStats.birthdayMonthCustomersCount}
+            />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6">
-              <p className="text-gray-400 mb-2">Clientes San Rafael</p>
-              <p className="text-4xl font-bold">{dashboardStats.sanRafaelCustomersCount}</p>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <MetricCard
+              title="Clientes San Rafael"
+              value={dashboardStats.sanRafaelCustomersCount}
+            />
 
-            <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6">
-              <p className="text-gray-400 mb-2">Clientes Ventu</p>
-              <p className="text-4xl font-bold">{dashboardStats.ventuCustomersCount}</p>
-            </div>
+            <MetricCard
+              title="Clientes Ventu"
+              value={dashboardStats.ventuCustomersCount}
+            />
+
+            <MetricCard
+              title="Premios generados"
+              value={dashboardStats.totalPrizesCount}
+            />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1019,4 +1036,39 @@ function getCurrentMonthName() {
   ];
 
   return months[new Date().getMonth()];
+}
+
+function MetricCard({
+  title,
+  value,
+  goal,
+}: {
+  title: string;
+  value: number | string;
+  goal?: number;
+}) {
+  const numericValue = typeof value === "number" ? value : 0;
+  const progress = goal ? Math.min((numericValue / goal) * 100, 100) : null;
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6">
+      <p className="text-gray-400 mb-2">{title}</p>
+      <p className="text-4xl font-bold">{value}</p>
+
+      {goal && (
+        <>
+          <p className="text-xs text-gray-500 mt-2">
+            Meta: {goal}
+          </p>
+
+          <div className="w-full bg-black rounded-full h-2 mt-3 border border-zinc-800">
+            <div
+              className="bg-red-600 h-full rounded-full"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
