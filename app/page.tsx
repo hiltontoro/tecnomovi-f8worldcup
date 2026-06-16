@@ -815,17 +815,33 @@ en Finca 8
           </p>
         )}
       </div>
-      <div className="mt-12 flex flex-col items-center">
-  <p className="text-xs text-gray-500 mb-3">
-    Experiencia desarrollada por
-  </p>
+      <div className="mt-12 flex flex-col items-center gap-8">
+        <div className="flex flex-col items-center">
+          <p className="text-xs text-gray-500 mb-3 uppercase tracking-[0.2em]">
+            Patrocinado por
+          </p>
 
-  <img
-    src="/tecnomovi-logo.png"
-    alt="TecnoMovi"
-className="w-44 object-contain opacity-90"
-  />
-</div>
+          <img
+            src="/Variante BAC Sello50 Blanco (2).png"
+            alt="BAC"
+            className="w-36 sm:w-44 object-contain opacity-95"
+          />
+        </div>
+
+        <div className="w-32 h-px bg-zinc-800" />
+
+        <div className="flex flex-col items-center">
+          <p className="text-xs text-gray-500 mb-3 uppercase tracking-[0.2em]">
+            Experiencia desarrollada por
+          </p>
+
+          <img
+            src="/tecnomovi-logo.png"
+            alt="TecnoMovi"
+            className="w-44 object-contain opacity-90"
+          />
+        </div>
+      </div>
     </main>
   );
 }
