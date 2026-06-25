@@ -6,6 +6,8 @@ import { supabase } from "../../lib/supabase";
 export default function AdminPage() {
  const [matches, setMatches] = useState<any[]>([]);
 const [pendingPrizes, setPendingPrizes] = useState<any[]>([]);
+const [challengesToValidate, setChallengesToValidate] = useState<any[]>([]);
+const [playersList, setPlayersList] = useState<any[]>([]);
 const [dashboardStats, setDashboardStats] = useState({
   customersCount: 0,
   predictionsCount: 0,
@@ -28,7 +30,7 @@ const [topCustomers, setTopCustomers] = useState<any[]>([]);
 const [recentCustomers, setRecentCustomers] = useState<any[]>([]);
 const [customersList, setCustomersList] = useState<any[]>([]);
 const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<any>(null);
-const [activeTab, setActiveTab] = useState<"dashboard" | "customers" | "manual" | "history" | "automatic" | "prizes">("dashboard");
+const [activeTab, setActiveTab] = useState<"dashboard" | "customers" | "manual" | "history" | "automatic" | "challenges" | "prizes">("dashboard");
 
   const finishedMatches = matches.filter((match) => isMatchClosed(match));
   const pendingMatches = matches.filter((match) => !isMatchClosed(match));
@@ -56,11 +58,13 @@ const [activeTab, setActiveTab] = useState<"dashboard" | "customers" | "manual" 
   }, {});
 
   useEffect(() => {
-  loadDashboardStats();
-  loadMatches();
-  loadPendingPrizes();
-  loadCustomersList();
-}, []);
+    loadDashboardStats();
+    loadMatches();
+    loadPendingPrizes();
+    loadCustomersList();
+    loadChallengesToValidate();
+    loadPlayersList();
+  }, []);
   async function loadMatches() {
     const { data, error } = await supabase
       .from("matches")
@@ -81,11 +85,11 @@ async function loadDashboardStats() {
     .select("*", { count: "exact", head: true });
 
   const { count: predictionsCount } = await supabase
-    .from("predictions")
+    .from("challenge_entries")
     .select("*", { count: "exact", head: true });
 
   const { count: visitsCount } = await supabase
-    .from("visits")
+    .from("daily_code_validations")
     .select("*", { count: "exact", head: true });
 
   const { count: pendingPrizesCount } = await supabase
@@ -180,6 +184,329 @@ const { data: tomorrowCodeData } = await supabase
     topCustomerRaffleEntries: topCustomer?.final_raffle_entries || 0,
   });
 }
+async function loadPlayersList() {
+  const pageSize = 1000;
+
+  const { data: firstPage, error: firstError } = await supabase
+    .from("players")
+    .select("id, team_name, player_name, active")
+    .order("team_name", { ascending: true })
+    .order("player_name", { ascending: true })
+    .range(0, pageSize - 1);
+
+  if (firstError) {
+    console.log("PLAYERS LIST LOAD ERROR:", firstError);
+    setPlayersList([]);
+    return;
+  }
+
+  const { data: secondPage, error: secondError } = await supabase
+    .from("players")
+    .select("id, team_name, player_name, active")
+    .order("team_name", { ascending: true })
+    .order("player_name", { ascending: true })
+    .range(pageSize, pageSize * 2 - 1);
+
+  if (secondError) {
+    console.log("PLAYERS LIST LOAD ERROR:", secondError);
+    setPlayersList(firstPage || []);
+    return;
+  }
+
+  setPlayersList([...(firstPage || []), ...(secondPage || [])]);
+}
+
+
+
+async function addMatchScorerForMatch(matchId: number, playerName: string, minute: string) {
+  if (!playerName || !minute.trim()) {
+    alert("Seleccioná goleador e ingresá minuto.");
+    return;
+  }
+
+  const minuteNumber = Number(minute);
+
+  if (Number.isNaN(minuteNumber) || minuteNumber < 0) {
+    alert("Ingresá un minuto válido.");
+    return;
+  }
+
+  const { error } = await supabase
+    .from("match_scorers")
+    .insert({
+      match_id: matchId,
+      player_name: playerName,
+      minute: minuteNumber,
+    });
+
+  if (error) {
+    console.log("MATCH SCORER INSERT ERROR:", error);
+    alert("No se pudo agregar el goleador.");
+    return;
+  }
+
+  alert("Goleador agregado al partido.");
+}
+
+async function loadChallengesToValidate() {
+  const { data, error } = await supabase
+    .from("prediction_challenges")
+    .select(`
+      id,
+      title,
+      description,
+      difficulty_level,
+      prize_id,
+      closes_at,
+      status,
+      available_prizes (
+        name
+      ),
+      challenge_results (
+        id,
+        validated_at
+      ),
+      challenge_matches (
+        match_id,
+        matches (
+          id,
+          home_team,
+          away_team,
+          home_score,
+          away_score,
+          status
+        )
+      )
+    `)
+    .order("display_order", { ascending: true })
+    .order("closes_at", { ascending: true });
+
+  if (error) {
+    console.log("CHALLENGES TO VALIDATE LOAD ERROR:", error);
+    setChallengesToValidate([]);
+    return;
+  }
+
+  setChallengesToValidate(data || []);
+}
+
+function getChallengePrizeName(challenge: any) {
+  const prizeData = Array.isArray(challenge.available_prizes)
+    ? challenge.available_prizes[0]
+    : challenge.available_prizes;
+
+  return prizeData?.name || challenge.title || "Premio Golazo Finca 8";
+}
+
+function hasChallengeBeenValidated(challenge: any) {
+  return Array.isArray(challenge.challenge_results) && challenge.challenge_results.length > 0;
+}
+
+function areChallengeMatchesCompleted(challenge: any) {
+  return (challenge.challenge_matches || []).every((challengeMatch: any) => {
+    const match = challengeMatch.matches;
+
+    return (
+      match &&
+      match.home_score !== null &&
+      match.home_score !== undefined &&
+      match.away_score !== null &&
+      match.away_score !== undefined
+    );
+  });
+}
+
+function challengeNeedsScorer(challenge: any) {
+  return challenge.difficulty_level === "hard" || challenge.difficulty_level === "legendary";
+}
+
+function challengeNeedsScorerInEveryMatch(challenge: any) {
+  return challenge.difficulty_level === "legendary";
+}
+
+async function validateChallengeWinners(challenge: any) {
+  if (hasChallengeBeenValidated(challenge)) {
+    alert("Este reto ya fue validado.");
+    return;
+  }
+
+  if (!areChallengeMatchesCompleted(challenge)) {
+    alert("Primero ingresá los resultados reales de todos los partidos del reto.");
+    return;
+  }
+
+  const challengeMatches = challenge.challenge_matches || [];
+  const matchIds = challengeMatches.map((challengeMatch: any) => challengeMatch.match_id);
+
+  const { data: existingResult } = await supabase
+    .from("challenge_results")
+    .select("id")
+    .eq("challenge_id", challenge.id)
+    .maybeSingle();
+
+  if (existingResult) {
+    alert("Este reto ya fue validado.");
+    await loadChallengesToValidate();
+    return;
+  }
+
+  const { data: entries, error: entriesError } = await supabase
+    .from("challenge_entries")
+    .select("id, customer_id, challenge_id")
+    .eq("challenge_id", challenge.id);
+
+  if (entriesError) {
+    console.log("CHALLENGE ENTRIES LOAD ERROR:", entriesError);
+    alert("No se pudieron cargar las participaciones del reto.");
+    return;
+  }
+
+  const entryIds = (entries || []).map((entry: any) => entry.id);
+  const customerIds = (entries || []).map((entry: any) => entry.customer_id);
+
+  if (entryIds.length === 0) {
+    await supabase.from("challenge_results").insert({
+      challenge_id: challenge.id,
+      validated_by: "admin",
+      notes: "Reto validado sin participaciones.",
+    });
+
+    alert("Reto validado. No hubo participaciones.");
+    await loadChallengesToValidate();
+    return;
+  }
+
+  const { data: entryDetails, error: detailsError } = await supabase
+    .from("challenge_entry_details")
+    .select("id, challenge_entry_id, match_id, predicted_goal_scorer")
+    .in("challenge_entry_id", entryIds);
+
+  if (detailsError) {
+    console.log("CHALLENGE ENTRY DETAILS LOAD ERROR:", detailsError);
+    alert("No se pudieron cargar los detalles del reto.");
+    return;
+  }
+
+  const { data: predictions, error: predictionsError } = await supabase
+    .from("user_match_predictions")
+    .select("customer_id, match_id, predicted_home_score, predicted_away_score")
+    .in("customer_id", customerIds)
+    .in("match_id", matchIds);
+
+  if (predictionsError) {
+    console.log("USER MATCH PREDICTIONS LOAD ERROR:", predictionsError);
+    alert("No se pudieron cargar las predicciones base.");
+    return;
+  }
+
+  const { data: scorers, error: scorersError } = await supabase
+    .from("match_scorers")
+    .select("match_id, player_name")
+    .in("match_id", matchIds);
+
+  if (scorersError) {
+    console.log("MATCH SCORERS LOAD ERROR:", scorersError);
+    alert("No se pudieron cargar los goleadores reales.");
+    return;
+  }
+
+  const winners: any[] = [];
+
+  for (const entry of entries || []) {
+    const allScoresCorrect = challengeMatches.every((challengeMatch: any) => {
+      const match = challengeMatch.matches;
+
+      const prediction = (predictions || []).find(
+        (item: any) => item.customer_id === entry.customer_id && item.match_id === challengeMatch.match_id
+      );
+
+      return (
+        prediction &&
+        match &&
+        prediction.predicted_home_score === match.home_score &&
+        prediction.predicted_away_score === match.away_score
+      );
+    });
+
+    if (!allScoresCorrect) {
+      continue;
+    }
+
+    if (!challengeNeedsScorer(challenge)) {
+      winners.push(entry);
+      continue;
+    }
+
+    const detailsForEntry = (entryDetails || []).filter(
+      (detail: any) => detail.challenge_entry_id === entry.id
+    );
+
+    const correctScorerDetails = detailsForEntry.filter((detail: any) => {
+      if (!detail.predicted_goal_scorer) {
+        return false;
+      }
+
+      return (scorers || []).some(
+        (scorer: any) =>
+          scorer.match_id === detail.match_id &&
+          scorer.player_name === detail.predicted_goal_scorer
+      );
+    });
+
+    if (challengeNeedsScorerInEveryMatch(challenge)) {
+      const allMatchesHaveCorrectScorer = challengeMatches.every((challengeMatch: any) =>
+        correctScorerDetails.some((detail: any) => detail.match_id === challengeMatch.match_id)
+      );
+
+      if (allMatchesHaveCorrectScorer) {
+        winners.push(entry);
+      }
+    } else if (correctScorerDetails.length > 0) {
+      winners.push(entry);
+    }
+  }
+
+  const prizeName = getChallengePrizeName(challenge);
+
+  if (winners.length > 0) {
+    const prizeRows = winners.map((winner) => ({
+      customer_id: winner.customer_id,
+      prize_name: `${prizeName} - Golazo Finca 8`,
+      delivered: false,
+    }));
+
+    const { error: prizeError } = await supabase
+      .from("customer_prizes")
+      .insert(prizeRows);
+
+    if (prizeError) {
+      console.log("CHALLENGE PRIZE INSERT ERROR:", prizeError);
+      alert("Se detectaron ganadores, pero no se pudieron asignar los premios.");
+      return;
+    }
+  }
+
+  const { error: resultError } = await supabase
+    .from("challenge_results")
+    .insert({
+      challenge_id: challenge.id,
+      validated_by: "admin",
+      notes: `${winners.length} ganador(es) detectado(s).`,
+    });
+
+  if (resultError) {
+    console.log("CHALLENGE RESULT INSERT ERROR:", resultError);
+    alert("Se asignaron premios, pero no se pudo marcar el reto como validado.");
+    return;
+  }
+
+  alert(`Reto validado. Ganadores detectados: ${winners.length}`);
+
+  await loadChallengesToValidate();
+  await loadPendingPrizes();
+  await loadDashboardStats();
+}
+
 async function loadPendingPrizes() {
   const { data, error } = await supabase
     .from("customer_prizes")
@@ -303,6 +630,9 @@ async function markPrizeDelivered(prizeId: number) {
       .update({
         home_score_actual: homeScore,
         away_score_actual: awayScore,
+        home_score: homeScore,
+        away_score: awayScore,
+        status: "completed",
         is_finished: true,
       })
       .eq("id", id);
@@ -459,15 +789,25 @@ async function markPrizeDelivered(prizeId: number) {
           Resultados automáticos
         </button>
         <button
-  onClick={() => setActiveTab("prizes")}
-  className={`px-5 py-3 rounded-lg font-bold ${
-    activeTab === "prizes"
-      ? "bg-red-600 text-white"
-      : "bg-zinc-800 text-gray-300 border border-zinc-700"
-  }`}
->
-  Premios pendientes
-</button>
+          onClick={() => setActiveTab("challenges")}
+          className={`px-5 py-3 rounded-lg font-bold ${
+            activeTab === "challenges"
+              ? "bg-red-600 text-white"
+              : "bg-zinc-800 text-gray-300 border border-zinc-700"
+          }`}
+        >
+          Validar retos
+        </button>
+        <button
+          onClick={() => setActiveTab("prizes")}
+          className={`px-5 py-3 rounded-lg font-bold ${
+            activeTab === "prizes"
+              ? "bg-red-600 text-white"
+              : "bg-zinc-800 text-gray-300 border border-zinc-700"
+          }`}
+        >
+          Premios pendientes
+        </button>
       </div>
       {activeTab === "dashboard" && (
         <div className="space-y-6 max-w-5xl">
@@ -479,13 +819,13 @@ async function markPrizeDelivered(prizeId: number) {
             />
 
             <MetricCard
-              title="Pronósticos guardados"
+              title="Participaciones en retos"
               value={dashboardStats.predictionsCount}
               goal={dashboardStats.predictionGoal}
             />
 
             <MetricCard
-              title="Visitas registradas"
+              title="Clientes con código validado"
               value={dashboardStats.visitsCount}
             />
 
@@ -534,66 +874,22 @@ async function markPrizeDelivered(prizeId: number) {
             />
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6">
-              <h2 className="text-2xl font-bold mb-4">🏆 Cliente líder</h2>
-              <p className="text-xl mb-2">{dashboardStats.topCustomerName}</p>
-              <p className="text-gray-300">
-                ⭐ {dashboardStats.topCustomerStamps} estampas · 🎟️ {dashboardStats.topCustomerRaffleEntries} boletos
-              </p>
-            </div>
-
+          <div className="grid grid-cols-1 gap-4 max-w-3xl">
             <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6">
               <h2 className="text-2xl font-bold mb-4">📋 Resumen operativo</h2>
               <p className="text-gray-300 mb-2">
-                Clientes activos en base: {dashboardStats.customersCount}
+                Clientes registrados: {dashboardStats.customersCount}
               </p>
               <p className="text-gray-300 mb-2">
-                Promedio de pronósticos por cliente: {dashboardStats.customersCount > 0 ? (dashboardStats.predictionsCount / dashboardStats.customersCount).toFixed(1) : "0"}
+                Participaciones por cliente: {dashboardStats.customersCount > 0 ? (dashboardStats.predictionsCount / dashboardStats.customersCount).toFixed(1) : "0"}
               </p>
               <p className="text-gray-300">
-                Premios esperando entrega: {dashboardStats.pendingPrizesCount}
+                Premios pendientes por entregar: {dashboardStats.pendingPrizesCount}
               </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6">
-              <h2 className="text-2xl font-bold mb-4">🥇 Top clientes</h2>
-
-              {topCustomers.length === 0 && (
-                <p className="text-gray-300">Todavía no hay ranking.</p>
-              )}
-
-              <div className="space-y-3">
-                {topCustomers.map((reward, index) => {
-                  const customerData = Array.isArray(reward.customers)
-                    ? reward.customers[0]
-                    : reward.customers;
-
-                  return (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between border-b border-zinc-800 pb-3"
-                    >
-                      <div>
-                        <p className="font-bold">
-                          {index + 1}. {customerData?.name || "Sin nombre"}
-                        </p>
-                        <p className="text-sm text-gray-400">
-                          {customerData?.phone || "Sin teléfono"}
-                        </p>
-                      </div>
-
-                      <p className="text-gray-300">
-                        ⭐ {reward.stamps_count || 0} · 🎟️ {reward.final_raffle_entries || 0}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
+          <div className="grid grid-cols-1 gap-4 max-w-3xl">
             <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6">
               <h2 className="text-2xl font-bold mb-4">🆕 Clientes recientes</h2>
 
@@ -773,6 +1069,8 @@ async function markPrizeDelivered(prizeId: number) {
                     key={match.id}
                     match={match}
                     onSave={saveResult}
+                    playersList={playersList}
+                    onAddScorer={addMatchScorerForMatch}
                   />
                 ))}
               </div>
@@ -836,6 +1134,104 @@ async function markPrizeDelivered(prizeId: number) {
         </div>
       )}
 
+      {activeTab === "challenges" && (
+        <div className="space-y-6 max-w-5xl">
+          {challengesToValidate.length === 0 && (
+            <p className="text-gray-300">
+              No hay retos creados todavía.
+            </p>
+          )}
+
+          {challengesToValidate.map((challenge) => {
+            const alreadyValidated = hasChallengeBeenValidated(challenge);
+            const matchesCompleted = areChallengeMatchesCompleted(challenge);
+            const prizeName = getChallengePrizeName(challenge);
+
+            return (
+              <div
+                key={challenge.id}
+                className="bg-zinc-900 border border-zinc-700 rounded-xl p-6"
+              >
+                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-4">
+                  <div>
+                    <p className="text-xs text-gray-400 uppercase tracking-[0.2em] mb-1">
+                      {challenge.difficulty_level === "easy" && "Premio pequeño"}
+                      {challenge.difficulty_level === "medium" && "Premio mediano"}
+                      {challenge.difficulty_level === "hard" && "Premio grande"}
+                      {challenge.difficulty_level === "legendary" && "Premio legendario"}
+                    </p>
+
+                    <h2 className="text-2xl font-bold mb-2">
+                      {challenge.title}
+                    </h2>
+
+                    <p className="text-gray-300 mb-2">
+                      Premio: {prizeName}
+                    </p>
+
+                    <p className="text-sm text-gray-500">
+                      Cierre: {new Date(challenge.closes_at).toLocaleString("es-HN")}
+                    </p>
+                  </div>
+
+                  <div className="text-sm">
+                    {alreadyValidated ? (
+                      <span className="bg-green-900/60 border border-green-700 text-green-200 px-3 py-2 rounded-lg inline-block">
+                        Validado
+                      </span>
+                    ) : matchesCompleted ? (
+                      <span className="bg-yellow-900/60 border border-yellow-700 text-yellow-200 px-3 py-2 rounded-lg inline-block">
+                        Listo para validar
+                      </span>
+                    ) : (
+                      <span className="bg-zinc-800 border border-zinc-700 text-gray-300 px-3 py-2 rounded-lg inline-block">
+                        Pendiente de resultados
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3 mb-5">
+                  {(challenge.challenge_matches || []).map((challengeMatch: any) => {
+                    const match = challengeMatch.matches;
+
+                    if (!match) {
+                      return null;
+                    }
+
+                    return (
+                      <div
+                        key={challengeMatch.match_id}
+                        className="bg-black border border-zinc-700 rounded-lg p-4"
+                      >
+                        <p className="font-bold">
+                          {match.home_team} vs {match.away_team}
+                        </p>
+                        <p className="text-sm text-gray-400">
+                          Resultado: {match.home_score ?? "-"} - {match.away_score ?? "-"}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <button
+                  onClick={() => validateChallengeWinners(challenge)}
+                  disabled={alreadyValidated || !matchesCompleted}
+                  className={`w-full p-4 rounded-lg font-bold ${
+                    alreadyValidated || !matchesCompleted
+                      ? "bg-zinc-700 text-gray-400 cursor-not-allowed"
+                      : "bg-red-600 hover:bg-red-700 text-white"
+                  }`}
+                >
+                  {alreadyValidated ? "RETO YA VALIDADO" : "VALIDAR Y ASIGNAR PREMIOS"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {activeTab === "prizes" && (
         <div className="space-y-6 max-w-3xl">
           {pendingPrizes.length === 0 && (
@@ -876,7 +1272,7 @@ async function markPrizeDelivered(prizeId: number) {
       <div className="mt-12 flex flex-col items-center gap-8">
         <div className="flex flex-col items-center">
           <p className="text-xs text-gray-500 mb-3 uppercase tracking-[0.2em]">
-            Patrocinado por
+            Conseguí beneficios en comercios aliados
           </p>
 
           <img
@@ -907,16 +1303,35 @@ async function markPrizeDelivered(prizeId: number) {
 function MatchCard({
   match,
   onSave,
+  playersList,
+  onAddScorer,
 }: {
   match: any;
+  playersList: any[];
   onSave: (
     id: number,
     homeScore: number,
     awayScore: number
   ) => void;
+  onAddScorer: (
+    matchId: number,
+    playerName: string,
+    minute: string
+  ) => void;
 }) {
   const [homeScore, setHomeScore] = useState(match.home_score_actual ?? 0);
   const [awayScore, setAwayScore] = useState(match.away_score_actual ?? 0);
+
+  const [selectedScorer, setSelectedScorer] = useState("");
+  const [scorerMinuteValue, setScorerMinuteValue] = useState("");
+
+  const homeTeamPlayers = playersList
+    .filter((player) => teamsMatch(player.team_name, match.home_team))
+    .sort((a, b) => a.player_name.localeCompare(b.player_name));
+
+  const awayTeamPlayers = playersList
+    .filter((player) => teamsMatch(player.team_name, match.away_team))
+    .sort((a, b) => a.player_name.localeCompare(b.player_name));
 
   return (
     <div className="bg-zinc-900 rounded-xl p-6">
@@ -946,6 +1361,52 @@ function MatchCard({
       >
         Guardar resultado
       </button>
+
+      <div className="mt-6 border-t border-zinc-700 pt-5">
+        <h3 className="font-bold mb-3">⚽ Goleadores reales</h3>
+
+        <div className="space-y-3">
+          <select
+            value={selectedScorer}
+            onChange={(e) => setSelectedScorer(e.target.value)}
+            className="w-full bg-white text-black p-3 rounded-lg"
+          >
+            <option value="">Seleccionar goleador</option>
+            <option disabled>── {match.home_team} ──</option>
+            {homeTeamPlayers.map((player) => (
+              <option key={player.id} value={player.player_name}>
+                {player.player_name} — {player.team_name}
+              </option>
+            ))}
+
+            <option disabled>── {match.away_team} ──</option>
+            {awayTeamPlayers.map((player) => (
+              <option key={player.id} value={player.player_name}>
+                {player.player_name} — {player.team_name}
+              </option>
+            ))}
+          </select>
+
+          <input
+            type="number"
+            value={scorerMinuteValue}
+            onChange={(e) => setScorerMinuteValue(e.target.value)}
+            placeholder="Minuto del gol"
+            className="w-full bg-white text-black p-3 rounded-lg"
+          />
+
+          <button
+            onClick={async () => {
+              await onAddScorer(match.id, selectedScorer, scorerMinuteValue);
+              setSelectedScorer("");
+              setScorerMinuteValue("");
+            }}
+            className="w-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 p-3 rounded font-bold"
+          >
+            Agregar goleador
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1100,4 +1561,44 @@ function MetricCard({
       )}
     </div>
   );
+}
+// Helper functions moved to module scope for MatchCard access
+
+function normalizeTeamName(teamName: string) {
+  const normalized = String(teamName || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[’']/g, "'")
+    .replace(/\s+/g, " ");
+
+  const aliases: Record<string, string> = {
+    "espana": "spain",
+    "spain": "spain",
+    "congo dr": "dr congo",
+    "dr congo": "dr congo",
+    "cote d'ivoire": "ivory coast",
+    "ivory coast": "ivory coast",
+    "ir iran": "iran",
+    "iran": "iran",
+    "korea republic": "south korea",
+    "south korea": "south korea",
+    "united states": "united states",
+    "united states of america": "united states",
+    "usa": "united states",
+    "u.s.a.": "united states",
+    "us": "united states",
+    "curacao": "curacao",
+    "turkiye": "turkey",
+    "turkey": "turkey",
+    "cabo verde": "cape verde",
+    "cape verde": "cape verde",
+  };
+
+  return aliases[normalized] || normalized;
+}
+
+function teamsMatch(playerTeamName: string, matchTeamName: string) {
+  return normalizeTeamName(playerTeamName) === normalizeTeamName(matchTeamName);
 }
