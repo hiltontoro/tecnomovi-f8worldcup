@@ -467,7 +467,7 @@ async function loadMatches(skipCodeCheck = false) {
       return;
     }
 
-    const activeChallenges = (challengeData || []) as PredictionChallenge[];
+    const activeChallenges = (challengeData || []) as unknown as PredictionChallenge[];
 
     const allMatches = activeChallenges
       .flatMap((challenge) =>
@@ -710,7 +710,13 @@ async function loadMatches(skipCodeCheck = false) {
             extra_prediction: null,
           };
         })
-        .filter(Boolean);
+        .filter((row): row is {
+          challenge_entry_id: number;
+          match_id: number;
+          predicted_goal_scorer: string | null;
+          predicted_goal_minute: null;
+          extra_prediction: null;
+        } => row !== null);
 
       if (detailRows.length > 0) {
         const { error: detailError } = await supabase
